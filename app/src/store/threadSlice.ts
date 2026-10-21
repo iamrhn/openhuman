@@ -1,5 +1,9 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
+import {
+  GENERAL_TAB_VALUE,
+  isThreadVisibleInTab,
+} from '../features/conversations/utils/threadFilter';
 import { extractWorkflowProposalFromMessages } from '../lib/workflows/workflowProposal';
 import { threadApi } from '../services/api/threadApi';
 import { isThreadNotFoundCoreRpcError } from '../services/coreRpcClient';
@@ -171,9 +175,11 @@ export const deleteThread = createAsyncThunk(
       await threadApi.deleteThread(threadId);
       const state = getState() as { thread: ThreadState };
       if (state.thread.selectedThreadId === threadId) {
-        const remaining = state.thread.threads.filter(t => t.id !== threadId);
-        if (remaining.length > 0) {
-          dispatch(setSelectedThread(remaining[0].id));
+        const next = state.thread.threads.find(
+          thread => thread.id !== threadId && isThreadVisibleInTab(thread, GENERAL_TAB_VALUE)
+        );
+        if (next) {
+          dispatch(setSelectedThread(next.id));
         } else {
           dispatch(clearSelectedThread());
         }

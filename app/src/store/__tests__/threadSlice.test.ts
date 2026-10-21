@@ -11,6 +11,7 @@ import threadReducer, {
   clearSelectedThread,
   clearStaleThread,
   clearThreadInferenceActive,
+  deleteThread,
   generateThreadTitleIfNeeded,
   loadThreadMessages,
   loadThreads,
@@ -286,6 +287,56 @@ describe('threadSlice loadThreads thunk', () => {
     await request;
 
     expect(store.getState().thread.selectedThreadId).toBe('worker-created-after-request');
+  });
+});
+
+describe('threadSlice deleteThread thunk', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('selects the newest visible remaining thread instead of a newer hidden worker', async () => {
+    const store = createStore();
+    const deleted = makeThread({ id: 't-del', lastMessageAt: '2026-01-04T00:00:00.000Z' });
+    const worker = makeThread({
+      id: 'worker-1',
+      parentThreadId: 't-del',
+      labels: ['tasks'],
+      lastMessageAt: '2026-01-03T00:00:00.000Z',
+    });
+    const visible = makeThread({ id: 't-visible', lastMessageAt: '2026-01-02T00:00:00.000Z' });
+    mockedThreadApi.getThreads.mockResolvedValueOnce({
+      threads: [deleted, worker, visible],
+      count: 3,
+    });
+    await store.dispatch(loadThreads());
+    store.dispatch(setSelectedThread('t-del'));
+
+    mockedThreadApi.deleteThread.mockResolvedValueOnce({ deleted: true });
+    mockedThreadApi.getThreads.mockResolvedValueOnce({ threads: [worker, visible], count: 2 });
+    await store.dispatch(deleteThread('t-del')).unwrap();
+
+    expect(store.getState().thread.selectedThreadId).toBe('t-visible');
+  });
+
+  it('clears the selection when only hidden threads remain', async () => {
+    const store = createStore();
+    const deleted = makeThread({ id: 't-del' });
+    const worker = makeThread({
+      id: 'worker-1',
+      parentThreadId: 't-del',
+      labels: ['tasks'],
+      lastMessageAt: '2026-01-02T00:00:00.000Z',
+    });
+    mockedThreadApi.getThreads.mockResolvedValueOnce({ threads: [worker, deleted], count: 2 });
+    await store.dispatch(loadThreads());
+    store.dispatch(setSelectedThread('t-del'));
+
+    mockedThreadApi.deleteThread.mockResolvedValueOnce({ deleted: true });
+    mockedThreadApi.getThreads.mockResolvedValueOnce({ threads: [worker], count: 1 });
+    await store.dispatch(deleteThread('t-del')).unwrap();
+
+    expect(store.getState().thread.selectedThreadId).toBeNull();
   });
 });
 

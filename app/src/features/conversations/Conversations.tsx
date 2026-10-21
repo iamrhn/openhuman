@@ -1904,10 +1904,18 @@ const Conversations = ({
           cancelText: t('common.cancel'),
           destructive: true,
           onConfirm: () => {
-            if (shouldSyncChatRoute && routeThreadId === thread.id) {
-              navigate('/chat', { replace: true });
-            }
-            void dispatch(deleteThread(thread.id));
+            const wasSelected = selectedThreadId === thread.id;
+            const wasRouted = shouldSyncChatRoute && routeThreadId === thread.id;
+            void dispatch(deleteThread(thread.id))
+              .unwrap()
+              .then(() => {
+                if (wasSelected && store.getState().thread.selectedThreadId === null) {
+                  void handleCreateNewThread();
+                  return;
+                }
+                if (wasRouted) navigate('/chat', { replace: true });
+              })
+              .catch(error => debug('[chat] delete thread failed: %O', error));
           },
           onCancel: () => {},
         })
