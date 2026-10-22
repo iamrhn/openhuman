@@ -269,6 +269,8 @@ const Conversations = ({
   const navigate = useNavigate();
   const location = useLocation();
   const { threadId: routeThreadId } = useParams<{ threadId?: string }>();
+  const routeThreadIdRef = useRef(routeThreadId);
+  routeThreadIdRef.current = routeThreadId;
   const shouldSyncChatRoute = variant === 'page' && location.pathname.startsWith('/chat');
   const { threads, selectedThreadId, messages } = useAppSelector(state => state.thread);
   // Optional-chain + default: narrow test stores may omit `activeThreadIds`.
@@ -1908,12 +1910,20 @@ const Conversations = ({
             const wasRouted = shouldSyncChatRoute && routeThreadId === thread.id;
             void dispatch(deleteThread(thread.id))
               .unwrap()
-              .then(() => {
+              .then(payload => {
+                if (
+                  store.getState().thread.selectionIntentVersion !==
+                  payload.selectionIntentAfterDelete
+                ) {
+                  return;
+                }
                 if (wasSelected && store.getState().thread.selectedThreadId === null) {
                   void handleCreateNewThread();
                   return;
                 }
-                if (wasRouted) navigate('/chat', { replace: true });
+                if (wasRouted && routeThreadIdRef.current === thread.id) {
+                  navigate('/chat', { replace: true });
+                }
               })
               .catch(error => debug('[chat] delete thread failed: %O', error));
           },

@@ -338,6 +338,43 @@ describe('threadSlice deleteThread thunk', () => {
 
     expect(store.getState().thread.selectedThreadId).toBeNull();
   });
+
+  it('selects the visible thread with the greatest lastMessageAt regardless of array order', async () => {
+    const store = createStore();
+    const deleted = makeThread({ id: 't-del', lastMessageAt: '2026-01-04T00:00:00.000Z' });
+    const older = makeThread({ id: 't-older', lastMessageAt: '2026-01-01T00:00:00.000Z' });
+    const newer = makeThread({ id: 't-newer', lastMessageAt: '2026-01-03T00:00:00.000Z' });
+    mockedThreadApi.getThreads.mockResolvedValueOnce({
+      threads: [deleted, older, newer],
+      count: 3,
+    });
+    await store.dispatch(loadThreads());
+    store.dispatch(setSelectedThread('t-del'));
+
+    mockedThreadApi.deleteThread.mockResolvedValueOnce({ deleted: true });
+    mockedThreadApi.getThreads.mockResolvedValueOnce({ threads: [older, newer], count: 2 });
+    const result = await store.dispatch(deleteThread('t-del')).unwrap();
+
+    expect(store.getState().thread.selectedThreadId).toBe('t-newer');
+    expect(result).toEqual({ threadId: 't-del', selectionIntentAfterDelete: 2 });
+  });
+
+  it('keeps a successful delete when the list refresh fails', async () => {
+    const store = createStore();
+    const deleted = makeThread({ id: 't-del' });
+    const visible = makeThread({ id: 't-visible', lastMessageAt: '2026-01-02T00:00:00.000Z' });
+    mockedThreadApi.getThreads.mockResolvedValueOnce({ threads: [deleted, visible], count: 2 });
+    await store.dispatch(loadThreads());
+    store.dispatch(setSelectedThread('t-del'));
+
+    mockedThreadApi.deleteThread.mockResolvedValueOnce({ deleted: true });
+    mockedThreadApi.getThreads.mockRejectedValueOnce(new Error('refresh failed'));
+    const result = await store.dispatch(deleteThread('t-del')).unwrap();
+
+    expect(result).toEqual({ threadId: 't-del', selectionIntentAfterDelete: 2 });
+    expect(store.getState().thread.threads.map(thread => thread.id)).toEqual(['t-visible']);
+    expect(store.getState().thread.selectedThreadId).toBe('t-visible');
+  });
 });
 
 describe('threadSlice loadThreadMessages thunk', () => {

@@ -175,17 +175,33 @@ export const deleteThread = createAsyncThunk(
       await threadApi.deleteThread(threadId);
       const state = getState() as { thread: ThreadState };
       if (state.thread.selectedThreadId === threadId) {
-        const next = state.thread.threads.find(
-          thread => thread.id !== threadId && isThreadVisibleInTab(thread, GENERAL_TAB_VALUE)
-        );
+        const next = state.thread.threads
+          .filter(
+            thread => thread.id !== threadId && isThreadVisibleInTab(thread, GENERAL_TAB_VALUE)
+          )
+          .sort(
+            (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+          )[0];
         if (next) {
           dispatch(setSelectedThread(next.id));
         } else {
           dispatch(clearSelectedThread());
         }
       }
-      await dispatch(loadThreads()).unwrap();
-      return { threadId };
+      const selectionIntentAfterDelete =
+        (getState() as { thread: ThreadState }).thread.selectionIntentVersion ?? 0;
+      try {
+        await dispatch(loadThreads()).unwrap();
+      } catch (refreshError) {
+        if (IS_DEV) {
+          console.debug('[threadSlice] delete-thread list refresh failed', {
+            threadId,
+            error: refreshError,
+          });
+        }
+        dispatch(clearStaleThread(threadId));
+      }
+      return { threadId, selectionIntentAfterDelete };
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to delete thread');
     }
